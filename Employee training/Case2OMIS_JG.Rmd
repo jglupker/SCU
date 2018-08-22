@@ -1,0 +1,303 @@
+---
+title: "Case2Omis2400"
+author: "Jeff Glupker"
+date: "10/30/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+```
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+#load data
+```{r}
+nordstrom <- read.csv("Case Study 2 - Salesperson_training.csv")
+```
+
+#review data
+```{r}
+str(nordstrom)
+summary(nordstrom)
+```
+
+#add new measures and variables
+```{r}
+nordstrom$year <- NULL  #delete existing values for year variable
+#recreate year with actual year values
+nordstrom$year <- ifelse(nordstrom$year_2010 == 1,"2010",
+                         ifelse(nordstrom$year_2011 == 1, "2011",
+                                ifelse(nordstrom$year_2012 == 1, "2012",
+                                       ifelse(nordstrom$year_2013 == 1, "2013",
+                                              ifelse(nordstrom$year_2014 == 1, "2014",
+                                                     ifelse(nordstrom$year_2015 == 1, "2015","2009"))))))
+
+nordstrom$year <- factor(nordstrom$year) #set year as a factor varaible
+
+#other variables to add as dummys (some of these are purely for correlation, will not be included in any model)
+nordstrom$lessHS <- ifelse(nordstrom$school_years<12,1,0) #less than HS education
+nordstrom$HS <- ifelse(nordstrom$school_years==12,1,0) #graduated HS
+nordstrom$college <- ifelse(nordstrom$school_years>12,1,0) #education past HS
+nordstrom$zeroservice <- ifelse(nordstrom$service_years==0,1,0) #no prior service years at Nordstrom
+nordstrom$oneyear <- ifelse(nordstrom$service_years == 1,1,0) #1 year of prior service at Nordstrom
+nordstrom$moreservice <- ifelse(nordstrom$service_years>1,1,0) #multiple years of prior service at Nordstrom
+nordstrom$motherHS <- ifelse(nordstrom$mother_education<=12,1,0) #mother education up to HS graduate
+nordstrom$mother_college <- ifelse(nordstrom$mother_education>12,1,0) #mother education past HS
+nordstrom$year_2009 <- ifelse(nordstrom$year == "2009",1,0) #year 2009
+```
+
+#Check plots (I use ggplot just because I think it's better for visuals...if you don't have it, the package name to install is ggplot2)
+```{r}
+#feel free to play around with changing these between log and regular
+a <- ggplot(data = nordstrom, aes(x=log(annual_sales)))
+a + geom_histogram(binwidth = .05) #somewhat normal?
+b <- ggplot(data = nordstrom, aes(x=mother_education))
+b + geom_histogram(binwidth = 1) #normal, no log necessary
+c <- ggplot(data = nordstrom, aes(x=self_training_score))
+c + geom_histogram(binwidth = 1) #normal, no log necessary
+d <- ggplot(data = nordstrom, aes(x=score_other_test))
+d + geom_histogram(binwidth = 1) #normal, no log necessary
+f <- ggplot(data = nordstrom, aes(log(age)))
+f + geom_histogram(binwidth = .1) #normal enough
+g <- ggplot(data = nordstrom, aes(x=school_years))
+g + geom_histogram(binwidth = 1) #NOT normal, must transform
+h <- ggplot(data = nordstrom, aes(x=experience_years))
+h + geom_histogram(binwidth = 1) #NOT normal, must transform
+i <- ggplot(data = nordstrom, aes(x=service_years))
+i + geom_histogram(binwidth = 1) #NOT normal, must transform
+j <- ggplot(data = nordstrom, aes(x=year, y=annual_sales))
+j + geom_boxplot() #boxplot showing annual sales by year
+m <- ggplot(data = nordstrom, aes(x=year, y=self_training_score))
+m + geom_boxplot() #boxplot showing self training score by year
+k <- ggplot(data = nordstrom, aes(x=service_years, y=experience_years))
+k + geom_point() #scatter plot between service years & experience years
+```
+
+#master correlation table
+```{r}
+#build data frame
+nordstromdf2 <- data.frame(log(nordstrom$annual_sales),nordstrom$self_training_score,nordstrom$male,nordstrom$married,nordstrom$child,nordstrom$mother_education,
+                          nordstrom$score_other_test,nordstrom$age,nordstrom$lessHS, nordstrom$HS, nordstrom$college, log(nordstrom$experience_years+1),nordstrom$zeroservice, nordstrom$oneyear, nordstrom$moreservice,nordstrom$year_2009,
+                          nordstrom$year_2010,nordstrom$year_2011,nordstrom$year_2012,nordstrom$year_2013,nordstrom$year_2014,nordstrom$year_2015)
+cor(nordstromdf2)
+
+nordstromdf3 <- data.frame(log(nordstrom$annual_sales),nordstrom$self_training_score,nordstrom$male,nordstrom$married,nordstrom$child,nordstrom$mother_education,
+                          nordstrom$score_other_test,nordstrom$age,nordstrom$school_years, log(nordstrom$experience_years+1),nordstrom$zeroservice, nordstrom$oneyear, nordstrom$moreservice,nordstrom$year_2009,
+                          nordstrom$year_2010,nordstrom$year_2011,nordstrom$year_2012,nordstrom$year_2013,nordstrom$year_2014,nordstrom$year_2015)
+cor(nordstromdf3)
+
+b <- cor(nordstromdf2)
+b <- as.data.frame(b)
+(sum(abs(b$log.nordstrom.annual_sales))-1)/16  #checks mean correlation of annual sales
+(sum(abs(b$nordstrom.self_training_score))-1)/16 #checks mean correlation of self training score
+```
+
+#design and run models
+```{r}
+#rerun model with updated ind variables
+modelz <- lm(log(annual_sales)~self_training_score+
+               score_other_test+
+               school_years+
+               log(experience_years+1)+
+               oneyear+
+               moreservice+
+               age+
+               male+
+               married+
+               child+
+               factor(year), data = nordstrom)
+summary(modelz)
+#run model but remove school_years variable
+modely <- lm(log(annual_sales)~self_training_score+
+               score_other_test+
+               log(experience_years+1)+
+               oneyear+
+               moreservice+
+               age+
+               male+
+               married+
+               child+
+               factor(year), data = nordstrom)
+summary(modely)
+#run model but remove score_other test variable
+modelj <- lm(log(annual_sales)~self_training_score+
+               log(experience_years+1)+
+               oneyear+
+               moreservice+
+               age+
+               male+
+               married+
+               child+
+               factor(year), data = nordstrom)
+summary(modelj)
+
+#run chi-sq to test model fit
+anova(modelz,modely,modelj,test="Chisq") #looks like y (model without either school years or mom education) is better
+
+#check correlations
+nordstromdfy <- data.frame(nordstrom$self_training_score, nordstrom$score_other_test, log(nordstrom$experience_years+1),nordstrom$oneyear,nordstrom$moreservice, 
+                           nordstrom$age,
+                           nordstrom$male,
+                           nordstrom$married,
+                           nordstrom$child,
+                           nordstrom$year_2010,
+                           nordstrom$year_2011,
+                           nordstrom$year_2012,
+                           nordstrom$year_2013,
+                           nordstrom$year_2014,
+                           nordstrom$year_2015)
+library(usdm)
+vif(nordstromdfy) #oneyear and moreservice are both >3
+
+#remove oneyear from model
+modelx <- lm(log(annual_sales)~self_training_score+
+               score_other_test+
+               log(experience_years+1)+
+               moreservice+
+               age+
+               male+
+               married+
+               child+
+               factor(year), data = nordstrom)
+summary(modelx)
+#check correlations with this new model with oneyear removed
+nordstromdfx <- data.frame(nordstrom$self_training_score, nordstrom$score_other_test, log(nordstrom$experience_years+1),nordstrom$moreservice, nordstrom$age,
+                           nordstrom$male,
+                           nordstrom$married,
+                           nordstrom$child,
+                           nordstrom$year_2010,
+                           nordstrom$year_2011,
+                           nordstrom$year_2012,
+                           nordstrom$year_2013,
+                           nordstrom$year_2014,
+                           nordstrom$year_2015)
+vif(nordstromdfx)
+#check heteroskedasticity
+predmx <- predict(modelx)
+resmx <- resid(modelx)
+plot(predmx,resmx, ylab="residuals", xlab="fitted values")
+
+library(lmtest)
+gqtest(modelx)
+bptest(modelx)
+```
+
+#run 2SLS models
+```{r}
+#run 2SLS with 2 IVs - mother education and school years and score other test
+library(AER)
+library(foreign)
+modelw <- ivreg(log(annual_sales)~
+                  log(service_years+1)+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year)+
+                  self_training_score | mother_education+school_years+
+                  score_other_test+
+                  log(service_years+1)+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year), data = nordstrom)
+summary(modelw, diagnostics=TRUE)
+
+coeftest(modelw, vcov = vcovHC(modelw,"HC1"))
+
+modelwdf <- data.frame(log(nordstrom$annual_sales),nordstrom$self_training_score,nordstrom$mother_education, nordstrom$lessHS)
+cor(modelwdf)
+modelw[3]
+
+#run 2SLS with mother education and score other test
+modelv <- ivreg(log(annual_sales)~
+                  score_other_test+
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year)+
+                  self_training_score | mother_education+
+                  score_other_test+
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year), data = nordstrom)
+summary(modelv, diagnostics=TRUE)
+
+#run 2SLS with school years and score other test
+modelk <- ivreg(log(annual_sales)~
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year)+
+                  self_training_score | school_years+
+                  score_other_test+
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year), data = nordstrom)
+summary(modelk, diagnostics=TRUE)
+
+anova(modelv,modelk,test="Chisq") #model with 3 IVs is best
+
+#run 2SLS with lessHS only
+modelu <- ivreg(log(annual_sales)~
+                  score_other_test+
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year)+
+                  self_training_score | school_years+
+                  score_other_test+
+                  log(experience_years+1)+
+                  moreservice+
+                  age+
+                  male+
+                  married+
+                  child+
+                  factor(year), data = nordstrom)
+summary(modelu, diagnostics=TRUE)
+```
+
+#produce final results
+```{r}
+nordstrom$predicted_sales<-exp(modelw$fitted.values)#We create the variable predicted_sales to store the annual_sales predicted by our model.
+sales_score_model<-lm(log(predicted_sales)~self_training_score,data=nordstrom)#We run a simple regression between our predicted sales and self_training_scores.
+print(summary(sales_score_model))
+mean(nordstrom$self_training_score)
+mean(nordstrom$annual_sales)*1000*.017
+mean(nordstrom$annual_sales)*1000
+mean(nordstrom$service_years)
+median(nordstrom$service_years)
+sum(nordstrom$service_years>=2)
+290/758
+
+
+sales_not_trained=as.numeric(exp(sales_score_model$coefficients[1]+sales_score_model$coefficients[2]*101))#Using our regression model for annual sales and self_training_scores we calculate annual sales for those who have not taken the voluntary training program, whose average score is 101.
+sales_trained=as.numeric(exp(sales_score_model$coefficients[1]+sales_score_model$coefficients[2]*103.8562))#Using our regression model for annual sales and self_training_scores we calculate annual sales for those who have taken the voluntary training program, whose average score is 103.86.
+impact=sales_trained-sales_not_trained#We calculate the impact of training in annual sales as the difference between the predicted sales for those who have taken the training program and the predicted sales for those who have not taken the training program.
+
+print(sales_not_trained)
+print(sales_trained)
+print(impact)
+28/impact
+```
